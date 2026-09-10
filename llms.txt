@@ -1,0 +1,10 @@
+# DelayGuard
+
+DelayGuard is a testnet product built for the Somnia × DreamDEX Event Contracts Hackathon.
+
+It helps a person make a simple directional protection plan while waiting to buy or sell crypto. A future buyer is hurt by a price rise and can choose an Up Event Contract. A future seller is hurt by a price fall and can choose a Down Event Contract.
+
+Important: DelayGuard is not a guaranteed price lock, investment advice, or a promise of profit. It is directional protection using binary Event Contracts. The public website contains an instant local demo. The repository also contains an optional onchain companion that works with a funded Somnia Shannon testnet wallet and DreamDEX Event Contracts.
+
+Repository: https://github.com/fawazfff/delayguard
+
