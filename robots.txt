@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://delayguard.vercel.app/sitemap.xml
-
+Sitemap: https://delayguard-tau.vercel.app/sitemap.xml
