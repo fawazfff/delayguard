@@ -1,0 +1,13 @@
+{
+  "name": "delayguard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Directional price protection receipts powered by DreamDEX Event Contracts.",
+  "scripts": {
+    "start": "npx serve . -l 3000",
+    "onchain:discover": "npm --prefix onchain run discover",
+    "onchain:protect": "npm --prefix onchain run protect",
+    "onchain:claim": "npm --prefix onchain run claim"
+  }
+}
+
