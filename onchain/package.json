@@ -1,0 +1,16 @@
+{
+  "name": "delayguard-onchain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "discover": "node src/discover.mjs",
+    "protect": "node src/protect.mjs",
+    "claim": "node src/claim.mjs"
+  },
+  "dependencies": {
+    "@somnia-chain/markets-sdk": "^0.28.1",
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.0"
+  }
+}
+
