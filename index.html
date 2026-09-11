@@ -1,77 +1,89 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f7fbff" />
-    <meta name="description" content="DelayGuard creates real testnet directional price protection for people waiting to buy or sell crypto, powered by DreamDEX Event Contracts on Somnia." />
-    <link rel="canonical" href="https://delayguard-tau.vercel.app/" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="DelayGuard" />
-    <meta property="og:title" content="DelayGuard | Protect a crypto purchase while you wait" />
-    <meta property="og:description" content="Real testnet directional protection powered by DreamDEX Event Contracts on Somnia." />
-    <meta property="og:image" content="https://delayguard-tau.vercel.app/og.svg" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="DelayGuard | Protect a crypto purchase while you wait" />
-    <meta name="twitter:description" content="Real testnet directional protection powered by DreamDEX Event Contracts on Somnia." />
-    <meta name="twitter:image" content="https://delayguard-tau.vercel.app/og.svg" />
-    <title>DelayGuard | Protect a crypto purchase while you wait</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"DelayGuard","applicationCategory":"FinanceApplication","operatingSystem":"Web","description":"A testnet tool that creates directional price protection using DreamDEX Event Contracts on Somnia.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
-  </head>
-  <body>
-    <a class="skip-link" href="#planner">Skip to the planner</a>
-    <div class="page-glow glow-one"></div><div class="page-glow glow-two"></div>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="DelayGuard home"><span class="brand-mark" aria-hidden="true">↗</span><span>DelayGuard</span></a>
-      <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#testnet">Testnet</a><a href="#receipt">Receipt</a></nav>
-      <button class="wallet-button" id="walletButton" type="button"><span class="wallet-dot" aria-hidden="true"></span><span id="walletLabel">Connect wallet</span></button>
-    </header>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#09090b" />
+  <meta name="description" content="TAKE IT turns DreamDEX Event Contracts into a live cash-out game. Pick Up or Down, then cash out early or hold for the result." />
+  <title>TAKE IT | DreamDEX Event Contracts, made playable</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <header>
+    <a class="brand" href="/"><span class="brand-dot"></span> TAKE IT</a>
+    <div class="header-right"><span class="network">Somnia Shannon Testnet</span><button id="walletButton" class="ghost"><span id="walletLabel">Connect wallet</span></button></div>
+  </header>
 
-    <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow"><span></span> Built for DreamDEX Event Contracts</p>
-          <h1 id="hero-title">Your money should not lose value while you wait.</h1>
-          <p class="hero-text">If you plan to buy or sell crypto later, DelayGuard creates a small onchain position that can help when the price moves against your plan first.</p>
-          <div class="hero-actions"><a class="primary-button" href="#planner">Make a protection plan <span aria-hidden="true">→</span></a><a class="text-button" href="#how-it-works">See a simple example</a></div>
-          <p class="small-note">Somnia Shannon testnet only. Directional protection, not a guaranteed price lock.</p>
+  <main>
+    <section class="hero">
+      <p class="kicker">POWERED BY DREAMDEX EVENT CONTRACTS</p>
+      <h1>Pick a side.<br><span>Then decide when to leave.</span></h1>
+      <p class="lede">TAKE IT turns a binary market into one simple decision game. Choose Bitcoin Up or Down. While the clock runs, DreamDEX shows what your position can really sell for.</p>
+      <div class="proof-row"><span>Real DreamDEX market</span><span>Real wallet trade</span><span>Real cash-out</span></div>
+    </section>
+
+    <section class="game" id="game">
+      <div class="game-head">
+        <div><p class="mini">LIVE EVENT CONTRACT</p><h2><span id="assetTitle">BTC</span> · <span id="marketInterval">finding market…</span></h2></div>
+        <div class="clock"><span id="countdown">--:--</span><small>remaining</small></div>
+      </div>
+
+      <div id="setupView" class="panel setup-panel">
+        <div class="question">
+          <p id="marketQuestion">Finding the next live DreamDEX market…</p>
+          <div class="market-meta"><span id="marketStatus">Checking chain</span><a id="marketLink" href="#" target="_blank" rel="noreferrer" hidden>market proof ↗</a></div>
         </div>
-        <div class="hero-visual" aria-label="Example protection receipt">
-          <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div>
-          <article class="floating-card market-card card-enter-one"><div class="card-topline"><span class="token-icon eth">Ξ</span><span>ETH direction</span><span class="live-pill"><i></i> Live</span></div><strong>Up in the next window</strong><div class="market-row"><span>Protection side</span><b>ETH Up</b></div><div class="market-track"><span></span></div></article>
-          <article class="floating-card receipt-preview card-enter-two"><div class="receipt-head"><span class="receipt-icon">✓</span><span>Protection receipt</span></div><strong>Buy ETH later</strong><p>If ETH goes up while you wait, your Up position may win.</p><div class="receipt-status"><i></i> Real Somnia testnet proof</div></article>
-          <div class="visual-floor"></div>
+
+        <div class="asset-tabs" aria-label="Asset"><button class="asset-tab selected" data-asset="BTC">Bitcoin</button><button class="asset-tab" data-asset="ETH">Ethereum</button></div>
+
+        <p class="choose-label">Where do you think it finishes?</p>
+        <div class="sides">
+          <button class="side up selected" data-side="UP"><span>↑</span><div><b>UP</b><small>Finishes higher</small></div></button>
+          <button class="side down" data-side="DOWN"><span>↓</span><div><b>DOWN</b><small>Finishes lower</small></div></button>
         </div>
-      </section>
 
-      <section class="trust-strip" aria-label="Product facts"><div><b>Your wallet</b><span>You approve every transaction</span></div><div><b>Live DreamDEX market</b><span>No invented market</span></div><div><b>Real tx receipt</b><span>Explorer proof</span></div><div><b>Testnet first</b><span>No real money needed</span></div></section>
+        <div class="stake-row"><label for="stake">Amount to put behind your pick</label><div class="stake-input"><input id="stake" type="number" min="0.1" step="0.1" value="1" inputmode="decimal"><span id="collateralSymbol">test collateral</span></div><small>Testnet only. This is the maximum collateral budget for the entry.</small></div>
 
-      <section class="planner-section" id="planner" aria-labelledby="planner-title">
-        <div class="section-heading"><p class="eyebrow"><span></span> Create a plan</p><h2 id="planner-title">What are you waiting to do?</h2><p>Tell DelayGuard your plan. It chooses the direction that protects you if the price moves the wrong way.</p></div>
-        <div class="planner-shell">
-          <form class="planner-form" id="protectionForm">
-            <fieldset><legend>1. Your next move</legend><div class="choice-grid"><button class="choice selected" type="button" data-intent="buy"><span class="choice-icon">↓</span><span><b>Buy crypto later</b><small>I am worried the price may rise</small></span></button><button class="choice" type="button" data-intent="sell"><span class="choice-icon">↑</span><span><b>Sell crypto later</b><small>I am worried the price may fall</small></span></button></div></fieldset>
-            <fieldset><legend>2. What are you watching?</legend><label for="asset">Asset</label><select id="asset" name="asset"><option value="ETH">ETH</option><option value="BTC">BTC</option></select><div class="two-columns"><div><label for="amount">Planned amount</label><input id="amount" name="amount" type="number" min="1" max="1000000" value="100" inputmode="decimal" /><small>This describes the purchase or sale you are waiting to make.</small></div><div><label for="currency">Currency</label><select id="currency" name="currency"><option value="USD">USD</option><option value="USDC">USDC</option><option value="NGN">NGN</option></select></div></div></fieldset>
-            <fieldset><legend>3. How long will you wait?</legend><div class="time-options"><button class="time-choice" type="button" data-time="5">5 min</button><button class="time-choice selected" type="button" data-time="15">15 min</button><button class="time-choice" type="button" data-time="30">30 min</button></div></fieldset>
-            <button class="primary-button full-width" type="submit">Create my protection plan <span aria-hidden="true">→</span></button>
-          </form>
-          <aside class="plan-preview" aria-live="polite"><div class="preview-label">Your simple plan</div><div class="asset-line"><span class="token-icon eth" id="previewAssetIcon">Ξ</span><div><strong id="previewAsset">ETH</strong><small id="previewWindow">15 minute window</small></div></div><h3 id="previewTitle">Buying later means a price rise is the risk.</h3><p id="previewDescription">DelayGuard will protect the wait with the ETH Up side of a live DreamDEX Event Contract.</p><div class="direction-box"><span>Protection side</span><b id="previewSide">ETH Up</b><small id="previewExplanation">ETH rising makes your future purchase more expensive.</small></div><div class="demo-line"><span>Mode</span><b>Somnia Shannon testnet</b></div></aside>
+        <button id="enterButton" class="cta">BACK <span id="entrySide">UP</span> <span>→</span></button>
+        <p class="status" id="status">Connect your wallet, then TAKE IT will quote the live DreamDEX order book before sending anything.</p>
+      </div>
+
+      <div id="positionView" class="panel position-panel" hidden>
+        <div class="position-top"><span class="live-badge">LIVE POSITION</span><span id="positionSide" class="position-side">UP ↑</span></div>
+        <p class="position-copy">DreamDEX can buy this position from you right now for approximately</p>
+        <div class="offer" id="offerValue">--</div>
+        <div class="offer-symbol" id="offerSymbol">test collateral</div>
+        <div class="offer-grid">
+          <div><span>Max entered</span><b id="entryValue">--</b></div>
+          <div><span>Position shares</span><b id="shareValue">--</b></div>
+          <div><span>Held to win</span><b id="payoutValue">--</b></div>
         </div>
-      </section>
+        <div id="liquidityWarning" class="warning" hidden>DreamDEX can only fill part of this exit right now.</div>
+        <button id="cashoutButton" class="take-button" disabled>WAITING FOR A CASH-OUT OFFER…</button>
+        <button id="holdButton" class="hold-button">HOLD FOR THE RESULT</button>
+        <p class="status" id="positionStatus">Watching the live DreamDEX order book.</p>
+        <div class="tx-row"><a id="entryTx" href="#" target="_blank" rel="noreferrer" hidden>Entry transaction ↗</a><a id="exitTx" href="#" target="_blank" rel="noreferrer" hidden>Cash-out transaction ↗</a></div>
+      </div>
 
-      <section class="how-section" id="how-it-works" aria-labelledby="how-title"><div class="section-heading centered"><p class="eyebrow"><span></span> How it works</p><h2 id="how-title">Three steps. Your wallet stays yours.</h2></div><div class="steps"><article><span class="step-number">1</span><h3>Say what you plan to do</h3><p>Example: “I want to buy ETH in 15 minutes.” DelayGuard maps that to ETH Up.</p></article><article><span class="step-number">2</span><h3>Approve the protection</h3><p>DelayGuard finds a live DreamDEX Event Contract. Your wallet approves the real testnet transaction.</p></article><article><span class="step-number">3</span><h3>Keep the proof</h3><p>The receipt stores the market and Somnia transaction hash. If your side wins, claim it from the same page.</p></article></div></section>
+      <div id="resultView" class="panel result-panel" hidden>
+        <p class="mini">ROUND COMPLETE</p><h2 id="resultTitle">Position closed</h2><p id="resultCopy"></p>
+        <div class="result-proof" id="resultProof"></div>
+        <button id="claimButton" class="cta" hidden>CLAIM WINNING POSITION →</button>
+        <button id="newRoundButton" class="ghost wide">PLAY THE NEXT ROUND</button>
+      </div>
+    </section>
 
-      <section class="receipt-section" id="receipt" aria-labelledby="receipt-title"><div class="receipt-copy"><p class="eyebrow"><span></span> Onchain proof</p><h2 id="receipt-title">A receipt only after something really happened.</h2><p>DelayGuard does not call a local browser record “protected.” The onchain receipt appears only after DreamDEX reports that the order filled.</p><ul><li><span>✓</span> Your planned buy or sell</li><li><span>✓</span> The real Event Contract direction</li><li><span>✓</span> Somnia transaction proof</li></ul></div><article class="receipt-card" id="receiptCard"><div class="receipt-card-top"><span class="receipt-icon">✓</span><span>DelayGuard receipt</span><span class="receipt-badge" id="receiptBadge">Ready</span></div><div class="receipt-main"><p id="receiptAction">Buying ETH later</p><h3 id="receiptRisk">Protected if ETH rises</h3><p id="receiptAmount">Plan: 100 USD · 15 minutes</p></div><div class="receipt-rule"><span>Event Contract side</span><b id="receiptSide">ETH Up</b></div><div class="receipt-rule"><span>Network</span><b>Somnia Shannon</b></div><div class="receipt-card-footer"><span class="status-dot"></span><span id="receiptStatus">Create a plan to begin</span></div><div class="receipt-actions"><button class="primary-button full-width" id="executeProtection" type="button" hidden>Protect on Somnia testnet →</button><button class="secondary-button full-width" id="claimProtection" type="button" hidden>Claim winning protection</button><a class="text-button" id="receiptTxLink" href="#" target="_blank" rel="noreferrer" hidden>View protection transaction ↗</a></div></article></section>
+    <section class="why">
+      <div><p class="kicker">WHY THIS EXISTS</p><h2>Prediction markets usually make the interesting part look like a spreadsheet.</h2></div>
+      <div class="steps"><article><span>01</span><b>Pick</b><p>Choose Up or Down on a real live DreamDEX Event Contract.</p></article><article><span>02</span><b>Watch the offer move</b><p>Your cash-out offer comes from the actual DreamDEX order book.</p></article><article><span>03</span><b>Take it or hold</b><p>Sell early onchain, or stay in until DreamDEX settles the outcome.</p></article></div>
+    </section>
 
-      <section class="testnet-section" id="testnet" aria-labelledby="testnet-title"><div><p class="eyebrow"><span></span> No PC setup</p><h2 id="testnet-title">Use your wallet directly.</h2><p>The live site now signs through MetaMask or Rabby. If your wallet needs DreamDEX test USDC, DelayGuard can request it from the official testnet faucet before placing protection.</p></div><div class="testnet-actions"><button class="secondary-button" type="button" onclick="document.getElementById('walletButton').click()">Connect testnet wallet</button><p>You only approve testnet transactions in your wallet. DelayGuard never asks for your private key.</p></div></section>
-
-      <section class="cta-section"><h2>Waiting should not mean guessing.</h2><p>Make a plan and prove the protection onchain.</p><a class="primary-button" href="#planner">Create a protection plan <span aria-hidden="true">→</span></a></section>
-    </main>
-    <footer><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span><span>DelayGuard</span></a><p>Built for the Somnia × DreamDEX Event Contracts Hackathon.</p><a href="https://github.com/fawazfff/delayguard" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script type="module" src="/app.js"></script>
-  </body>
+    <section class="tech">
+      <p>Built for the Somnia × DreamDEX Event Contracts Hackathon.</p><p>No fake markets. No fake fills. No private keys.</p><a href="https://github.com/fawazfff/delayguard" target="_blank" rel="noreferrer">View GitHub ↗</a>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
 </html>
