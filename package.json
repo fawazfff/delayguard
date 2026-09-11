@@ -1,13 +1,23 @@
 {
   "name": "delayguard",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Directional price protection receipts powered by DreamDEX Event Contracts.",
+  "description": "Directional price protection powered by DreamDEX Event Contracts on Somnia.",
   "scripts": {
-    "start": "npx serve . -l 3000",
+    "dev": "vite --host 0.0.0.0",
+    "start": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
     "onchain:fund": "npm --prefix onchain run fund",
     "onchain:discover": "npm --prefix onchain run discover",
     "onchain:protect": "npm --prefix onchain run protect",
     "onchain:claim": "npm --prefix onchain run claim"
+  },
+  "dependencies": {
+    "@somnia-chain/markets-sdk": "^0.29.0",
+    "viem": "^2.55.10"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
   }
 }
