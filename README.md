@@ -1,85 +1,47 @@
 # DelayGuard
 
-**A price-protection receipt for people waiting to buy or sell crypto.**
+**Directional price protection for people waiting to buy or sell crypto.**
 
-When a person waits for a bank transfer or P2P payment before buying crypto, a price rise can make the purchase more expensive. When they wait to sell, a price fall can reduce what they receive. DelayGuard maps that simple risk to a DreamDEX Event Contract.
+When someone is waiting for a bank transfer or P2P payment before buying crypto, a price rise can make the purchase more expensive. When they are waiting to sell, a price fall can reduce what they receive.
 
-- Buying later? A price rise is the risk, so the protection side is **Up**.
-- Selling later? A price fall is the risk, so the protection side is **Down**.
+DelayGuard maps that simple risk to a DreamDEX Event Contract on Somnia:
 
-DelayGuard is **directional protection**, not a perfect price lock, investment advice, or guaranteed profit.
+- Buying later → price going up is the risk → protect with **Up**.
+- Selling later → price going down is the risk → protect with **Down**.
 
-## What is in this repository
+DelayGuard is directional protection, not a guaranteed price lock or guaranteed profit.
 
-1. A fast website for explaining the plan, connecting a Somnia wallet and creating a clear protection receipt.
-2. A testnet onchain companion using `@somnia-chain/markets-sdk`. It discovers a compatible live DreamDEX Event Contract, buys the selected direction, verifies that the transaction actually filled, saves the real transaction hash, and claims a winning position after settlement.
+## Main flow
 
-## Run a real Somnia testnet protection
+The public app is designed to work without a PC or private-key setup:
 
-Use a new **Somnia Shannon testnet-only wallet**. Never use a wallet holding real funds.
+1. Open DelayGuard in MetaMask or Rabby.
+2. Connect a wallet on Somnia Shannon testnet.
+3. Create a Buy Later or Sell Later plan.
+4. DelayGuard checks that the wallet has STT for gas.
+5. If DreamDEX test USDC is missing, the app can request it from the testnet faucet.
+6. DelayGuard finds a currently live BTC or ETH Event Contract and checks its onchain status.
+7. The wallet approves the real testnet DreamDEX order.
+8. A receipt is only saved if the order actually fills and a transaction hash is returned.
+9. After settlement, the same wallet can claim a winning position from the receipt page.
 
-### 1. Get a little STT for gas
+The website never asks for a private key.
 
-Use an official Somnia Shannon faucet. STT has no real-world value and is only used for testnet gas.
+## Real proof, not a fake receipt
 
-Somnia faucet: https://testnet.somnia.network/
+A local plan is not labelled as protected. The app only changes the receipt to **Onchain** after DreamDEX reports a non-zero fill and returns a Somnia transaction hash. Zero-fill or failed transactions are shown as failures.
 
-If the main faucet is unavailable, Somnia's network documentation also lists Google Cloud, Stakely and Thirdweb testnet faucets.
+The receipt stores the wallet, market ID, Event Contract outcome, amount filled, expiry and transaction hash. The explorer link provides public proof.
 
-### 2. Configure the test wallet
+## Testnet requirements
 
-Copy `.env.example` to `.env` and set the private key for this disposable testnet-only wallet.
+Use a disposable Somnia Shannon testnet wallet. It needs a little **STT** for gas. DreamDEX trading uses its own testnet collateral token from `SOMNIA_TESTNET_ADDRESSES.testUsdc`.
 
-Never paste a real wallet/private key into the public website and never commit `.env`.
+No real money is required.
 
-### 3. Install the onchain companion
+## Optional CLI fallback
 
-```bash
-cd onchain
-npm install
-```
-
-### 4. Ask DreamDEX for test collateral
-
-Once the wallet has STT, DelayGuard can request the required DreamDEX test USDC itself:
-
-```bash
-npm run fund
-```
-
-This checks the STT balance, calls DreamDEX's public testnet collateral faucet when needed, then verifies that tUSDC arrived.
-
-### 5. Find a compatible live Event Contract
-
-```bash
-npm run discover
-```
-
-If no matching ETH/BTC market is live, DelayGuard fails instead of silently using the wrong asset. Try again when the next DreamDEX window appears.
-
-### 6. Place protection
-
-Set `PLAN=BUY_LATER` or `PLAN=SELL_LATER` in the root `.env`, then run:
-
-```bash
-npm run protect
-```
-
-DelayGuard checks the onchain market state before sending. A reverted or zero-fill order is treated as a failure. `market.json` is only written after a real fill and includes the transaction hash for proof.
-
-### 7. Claim after settlement
-
-After the Event Contract resolves:
-
-```bash
-npm run claim
-```
-
-A winning position is redeemed and the claim transaction hash is saved. A losing receipt is marked settled and is not falsely shown as claimable.
-
-## Root commands
-
-From the repository root you can also use:
+The `onchain/` folder is kept as a developer fallback and evidence tool. It can discover markets, request test collateral, place protection and claim after settlement from a local testnet-only key. The public browser app is the primary experience.
 
 ```bash
 npm run onchain:fund
@@ -88,21 +50,29 @@ npm run onchain:protect
 npm run onchain:claim
 ```
 
+Never commit `.env`, `market.json` or wallet files.
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+Production build:
+
+```bash
+npm run build
+```
+
 ## Why DreamDEX is essential
 
-DelayGuard is not a price alert. DreamDEX Event Contracts create the actual Up or Down position, settle the outcome and produce a claimable onchain result. Without that Event Contract there is no protection position or settlement proof.
-
-## Safety notes
-
-- Testnet only for this hackathon build.
-- Use a disposable testnet-only wallet.
-- Do not commit `.env`, `market.json` or wallet files.
-- Never paste a private key into the public website.
-- Event Contract winnings must be claimed after settlement.
+DelayGuard is not just a price alert. DreamDEX Event Contracts create the real Up or Down position, settle the result and allow a winning position to be redeemed. Without DreamDEX there is no protection position or settlement proof.
 
 ## Stack
 
-- Static HTML, CSS and JavaScript
-- EIP-1193 browser wallet connection
-- `@somnia-chain/markets-sdk` + Viem for the testnet execution companion
-- Somnia Shannon testnet + DreamDEX Event Contracts
+- Vite + browser JavaScript
+- Viem browser wallet client
+- `@somnia-chain/markets-sdk`
+- Somnia Shannon testnet
+- DreamDEX Event Contracts
