@@ -1,82 +1,74 @@
-# DelayGuard
+# TAKE IT
 
-**Directional price protection for people waiting to buy or sell crypto.**
+**Pick a side. Then decide when to leave.**
 
-When someone is waiting for a bank transfer or P2P payment before buying crypto, a price rise can make the purchase more expensive. When they are waiting to sell, a price fall can reduce what they receive.
+TAKE IT turns DreamDEX Event Contracts into a simple live decision game.
 
-DelayGuard maps that simple risk to a DreamDEX Event Contract on Somnia:
+Choose whether BTC or ETH finishes **UP** or **DOWN**. After a real DreamDEX order fills, TAKE IT watches the live order book and shows the amount your position can currently sell for. You can cash out early with a real sell order or hold until DreamDEX settles the Event Contract.
 
-- Buying later → price going up is the risk → protect with **Up**.
-- Selling later → price going down is the risk → protect with **Down**.
+Built for the **Somnia × DreamDEX Event Contracts Hackathon**.
 
-DelayGuard is directional protection, not a guaranteed price lock or guaranteed profit.
+## The idea
 
-## Main flow
+Prediction markets usually make the most interesting part look like a trading terminal. TAKE IT hides the complexity behind one understandable question:
 
-The public app is designed to work without a PC or private-key setup:
+> Take the cash-out offer now, or hold for the final result?
 
-1. Open DelayGuard in MetaMask or Rabby.
-2. Connect a wallet on Somnia Shannon testnet.
-3. Create a Buy Later or Sell Later plan.
-4. DelayGuard checks that the wallet has STT for gas.
-5. If DreamDEX test USDC is missing, the app can request it from the testnet faucet.
-6. DelayGuard finds a currently live BTC or ETH Event Contract and checks its onchain status.
-7. The wallet approves the real testnet DreamDEX order.
-8. A receipt is only saved if the order actually fills and a transaction hash is returned.
-9. After settlement, the same wallet can claim a winning position from the receipt page.
+The cash-out value is not simulated. TAKE IT uses DreamDEX liquidity and only enables cash out when the SDK reports a real executable sell quote.
 
-The website never asks for a private key.
+## Demo flow
 
-## Real proof, not a fake receipt
+1. Connect MetaMask or Rabby on Somnia Shannon testnet.
+2. TAKE IT discovers a currently tradeable BTC or ETH DreamDEX Event Contract.
+3. Pick **UP** or **DOWN**.
+4. Buy a small outcome position through DreamDEX.
+5. The app watches the live DreamDEX order book.
+6. If bids exist, TAKE IT displays an executable estimated cash-out value.
+7. Press **TAKE IT** to sell the position early onchain, or hold until settlement.
+8. A winning held position can be redeemed after DreamDEX finalizes the market.
 
-A local plan is not labelled as protected. The app only changes the receipt to **Onchain** after DreamDEX reports a non-zero fill and returns a Somnia transaction hash. Zero-fill or failed transactions are shown as failures.
+## DreamDEX integration
 
-The receipt stores the wallet, market ID, Event Contract outcome, amount filled, expiry and transaction hash. The explorer link provides public proof.
+TAKE IT uses `@somnia-chain/markets-sdk` for:
 
-## Testnet requirements
+- live binary Event Contract discovery
+- authoritative onchain market status checks
+- browser-wallet signing
+- real market buy orders
+- live market watching
+- `quoteBinarySell()` cash-out estimates
+- real market sell orders
+- settlement checks
+- winning outcome redemption
 
-Use a disposable Somnia Shannon testnet wallet. It needs a little **STT** for gas. DreamDEX trading uses its own testnet collateral token from `SOMNIA_TESTNET_ADDRESSES.testUsdc`.
+A local browser state is never treated as proof of a trade. Entry, exit and claim states require DreamDEX/Somnia transaction results.
 
-No real money is required.
+## Safety / testnet
 
-## Optional CLI fallback
+- Somnia Shannon testnet only
+- no private keys are requested or stored
+- the connected wallet signs every write
+- no fake market prices or fake cash-out offers
+- if there is no executable bid, the UI says there is no cash-out offer
 
-The `onchain/` folder is kept as a developer fallback and evidence tool. It can discover markets, request test collateral, place protection and claim after settlement from a local testnet-only key. The public browser app is the primary experience.
+## Stack
 
-```bash
-npm run onchain:fund
-npm run onchain:discover
-npm run onchain:protect
-npm run onchain:claim
-```
+- Vite
+- Vanilla JavaScript
+- `@somnia-chain/markets-sdk`
+- viem
+- Somnia Shannon testnet
+- Vercel
 
-Never commit `.env`, `market.json` or wallet files.
-
-## Development
+## Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Production build:
+## Production
 
-```bash
-npm run build
-```
+https://delayguard-tau.vercel.app/
 
-## Deployment
-
-The production Vercel project is connected to `fawazfff/delayguard`. Pushes to `main` trigger a fresh production deployment.
-
-## Why DreamDEX is essential
-
-DelayGuard is not just a price alert. DreamDEX Event Contracts create the real Up or Down position, settle the result and allow a winning position to be redeemed. Without DreamDEX there is no protection position or settlement proof.
-
-## Stack
-
-- Vite + browser JavaScript
-- Viem browser wallet client
-- `@somnia-chain/markets-sdk`
-- Somnia Shannon testnet
-- DreamDEX Event Contracts
+The Vercel project is connected to this repository. Pushes to `main` trigger a production deployment.
