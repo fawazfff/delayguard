@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check": "node src/check-wallet.mjs",
     "discover": "node src/discover.mjs",
     "fund": "node src/faucet.mjs",
     "protect": "node src/protect.mjs",
