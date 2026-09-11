@@ -65,6 +65,10 @@ Production build:
 npm run build
 ```
 
+## Deployment
+
+The production Vercel project is connected to `fawazfff/delayguard`. Pushes to `main` trigger a fresh production deployment.
+
 ## Why DreamDEX is essential
 
 DelayGuard is not just a price alert. DreamDEX Event Contracts create the real Up or Down position, settle the result and allow a winning position to be redeemed. Without DreamDEX there is no protection position or settlement proof.
