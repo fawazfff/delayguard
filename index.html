@@ -43,10 +43,10 @@
           <button class="side down" data-side="DOWN"><span>↓</span><div><b>DOWN</b><small>Finishes lower</small></div></button>
         </div>
 
-        <div class="stake-row"><label for="stake">Amount to put behind your pick</label><div class="stake-input"><input id="stake" type="number" min="0.1" step="0.1" value="1" inputmode="decimal"><span id="collateralSymbol">test collateral</span></div><small>Testnet only. This is the maximum collateral budget for the entry.</small></div>
+        <div class="stake-row"><label for="stake">How many outcome shares?</label><div class="stake-input"><input id="stake" type="number" min="0.1" step="0.1" value="1" inputmode="decimal"><span>shares</span></div><small>For the demo, 1 share keeps the trade small. DreamDEX determines the actual collateral cost from the live order book.</small></div>
 
         <button id="enterButton" class="cta">BACK <span id="entrySide">UP</span> <span>→</span></button>
-        <p class="status" id="status">Connect your wallet, then TAKE IT will quote the live DreamDEX order book before sending anything.</p>
+        <p class="status" id="status">Connect your wallet, then TAKE IT will use a real DreamDEX market order. Nothing is marked as entered unless the order fills.</p>
       </div>
 
       <div id="positionView" class="panel position-panel" hidden>
@@ -55,7 +55,7 @@
         <div class="offer" id="offerValue">--</div>
         <div class="offer-symbol" id="offerSymbol">test collateral</div>
         <div class="offer-grid">
-          <div><span>Max entered</span><b id="entryValue">--</b></div>
+          <div><span>Requested entry</span><b id="entryValue">--</b></div>
           <div><span>Position shares</span><b id="shareValue">--</b></div>
           <div><span>Held to win</span><b id="payoutValue">--</b></div>
         </div>
