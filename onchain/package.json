@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "discover": "node src/discover.mjs",
+    "fund": "node src/faucet.mjs",
     "protect": "node src/protect.mjs",
     "claim": "node src/claim.mjs"
   },
@@ -13,4 +14,3 @@
     "viem": "^2.21.0"
   }
 }
-
