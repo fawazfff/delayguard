@@ -1,13 +1,14 @@
-import { SomniaMarkets, SOMNIA_TESTNET_ADDRESSES } from '@somnia-chain/markets-sdk';
+import { SomniaMarkets, SOMNIA_TESTNET_ADDRESSES, probabilityToPrice } from '@somnia-chain/markets-sdk';
 import { somniaShannon } from '@somnia-chain/markets-sdk/chains';
-import { createWalletClient, custom, formatUnits, parseUnits } from 'viem';
+import { createWalletClient, custom, formatUnits } from 'viem';
 
 const INDEXER_URL = 'https://dev.smk.somnia.host/v1/graphql';
 const WS_RPC_URL = 'wss://api.infra.testnet.somnia.network/ws';
 const EXPLORER = 'https://shannon-explorer.somnia.network';
 const SITE_HOST = 'delayguard-tau.vercel.app';
 const CHAIN_HEX = `0x${somniaShannon.id.toString(16)}`;
-const STORAGE_KEY = 'take-it-position-v1';
+const STORAGE_KEY = 'take-it-position-v2';
+const ONE = 1_000_000n;
 
 const exchange = new SomniaMarkets({
   indexerUrl: INDEXER_URL,
@@ -18,12 +19,11 @@ const exchange = new SomniaMarkets({
 
 const state = {
   asset: 'BTC', side: 'UP', market: null, wallet: null, walletClient: null,
-  position: null, quoteTimer: null, clockTimer: null, discoveryTimer: null, busy: false,
+  position: null, clockTimer: null, discoveryTimer: null, busy: false,
 };
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function toast(message) {
   const el = $('#toast');
@@ -33,28 +33,27 @@ function toast(message) {
 }
 function errText(error) { return error?.shortMessage || error?.message || 'Something went wrong.'; }
 function marketId(m) { return m?.marketId || m?.id; }
+function marketPool(m) { return m?.pool || m?.poolAddress; }
 function intervalLabel(m) {
   const s = Number(m?.intervalSec || 0);
   if (!s) return 'live round';
   if (s % 3600 === 0) return `${s / 3600}h`;
   return `${Math.round(s / 60)}m`;
 }
-function outcomeSymbol(m, side) {
-  const suffix = side === 'UP' ? '#YES' : '#NO';
-  return m?.outcomes?.find((o) => String(o.symbol).toUpperCase().endsWith(suffix))?.symbol || null;
+function fillUnits(result) {
+  return (result?.fills || []).reduce((sum, f) => sum + BigInt(f?.quantityFilled || 0), 0n);
 }
-function extractTxHash(value) {
-  const xs = [value?.txHash, value?.hash, value?.info?.hash, value?.info?.transactionHash, value?.info?.receipt?.transactionHash, value?.receipt?.transactionHash];
-  return xs.find((v) => typeof v === 'string' && /^0x[a-fA-F0-9]{64}$/.test(v)) || null;
+function txHash(result) {
+  const values = [result?.hash, result?.txHash, result?.receipt?.transactionHash, result?.info?.hash];
+  return values.find((v) => typeof v === 'string' && /^0x[a-fA-F0-9]{64}$/.test(v)) || null;
 }
-function fmt(raw, decimals = 6, max = 4) {
-  try { return Number(formatUnits(BigInt(raw || 0), decimals)).toLocaleString(undefined, { maximumFractionDigits: max }); }
-  catch { return '0'; }
+function sharesText(raw) {
+  return Number(formatUnits(BigInt(raw || 0), 6)).toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
-function setBusy(on, text) {
-  state.busy = on;
-  $('#enterButton').disabled = on || !state.market;
-  if (text) $('#status').textContent = text;
+function setBusy(value, message) {
+  state.busy = value;
+  $('#enterButton').disabled = value || !state.market;
+  if (message) $('#status').textContent = message;
 }
 
 function setupWalletButton() {
@@ -62,14 +61,14 @@ function setupWalletButton() {
     $('#walletLabel').textContent = state.wallet ? `${state.wallet.slice(0, 6)}…${state.wallet.slice(-4)}` : 'Connect wallet';
   } else {
     $('#walletLabel').textContent = 'Open in MetaMask';
-    $('#status').textContent = 'This browser cannot connect directly to a crypto wallet. Tap “Open in MetaMask” above, then use TAKE IT inside MetaMask’s browser.';
+    $('#status').textContent = 'Tap “Open in MetaMask” above. TAKE IT needs a wallet browser to sign the testnet trade.';
   }
 }
 
 async function ensureSomnia() {
   if (!window.ethereum) {
     window.location.href = `https://metamask.app.link/dapp/${SITE_HOST}`;
-    throw new Error('Opening TAKE IT inside MetaMask…');
+    throw new Error('Opening MetaMask…');
   }
   try {
     await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_HEX }] });
@@ -98,51 +97,46 @@ async function connectWallet() {
   state.walletClient = walletClient;
   exchange.setSigner({ walletClient });
   $('#walletLabel').textContent = `${address.slice(0, 6)}…${address.slice(-4)}`;
-  toast('Wallet connected to Somnia Shannon.');
   return address;
 }
 
-async function ensureFunding(m) {
+async function verifyFunding(market) {
   const native = await exchange.client.getViemClient().getBalance({ address: state.wallet });
   if (native === 0n) throw new Error('This wallet has no STT for gas. Add Somnia Shannon test STT first.');
-  const collateral = m.collateral || SOMNIA_TESTNET_ADDRESSES.testUsdc;
+  const collateral = market?.collateral || SOMNIA_TESTNET_ADDRESSES.testUsdc;
   if (!collateral) return;
-  let bal = await exchange.client.getErc20Balance(collateral, state.wallet);
-  if (bal > 0n) return;
-  $('#status').textContent = 'No test collateral found. Requesting DreamDEX test collateral…';
-  const faucet = await exchange.trader.faucet();
-  if (faucet?.receipt?.status === 'reverted') throw new Error('DreamDEX test collateral faucet reverted.');
-  await sleep(1800);
-  bal = await exchange.client.getErc20Balance(collateral, state.wallet);
-  if (bal === 0n) throw new Error('Test collateral did not arrive.');
+  const balance = await exchange.client.getErc20Balance(collateral, state.wallet);
+  if (balance === 0n) throw new Error('This wallet has no DreamDEX test collateral (tUSDC). Fund the same wallet first.');
+}
+
+async function findForAsset(asset) {
+  const listed = await exchange.client.listLiveBinaryMarkets({ asset, limit: 50 });
+  const now = Math.floor(Date.now() / 1000);
+  return (listed || [])
+    .filter((m) => String(m.asset).toUpperCase() === asset && Number(m.expiry || 0) > now + 60 && marketPool(m))
+    .sort((a, b) => Number(a.intervalSec || 999999) - Number(b.intervalSec || 999999) || Number(a.expiry) - Number(b.expiry))[0] || null;
 }
 
 async function discoverMarket() {
   if (state.position || state.busy) return;
   clearTimeout(state.discoveryTimer);
+  $('#enterButton').disabled = true;
+  $('#marketStatus').textContent = 'Reading DreamDEX live markets…';
+  $('#marketQuestion').textContent = `Looking for an open ${state.asset} Event Contract…`;
   try {
-    $('#marketStatus').textContent = 'Reading live DreamDEX markets…';
-    $('#marketQuestion').textContent = `Looking for the next ${state.asset} round…`;
-    $('#enterButton').disabled = true;
-
-    const listed = await exchange.client.listLiveBinaryMarkets({ asset: state.asset, limit: 50 });
-    const now = Math.floor(Date.now() / 1000);
-    const candidates = (listed || []).filter((m) => {
-      const secondsLeft = Number(m.expiry || 0) - now;
-      return String(m.asset).toUpperCase() === state.asset && secondsLeft > 45 && outcomeSymbol(m, 'UP') && outcomeSymbol(m, 'DOWN');
-    });
-
-    candidates.sort((a, b) => {
-      const ai = Number(a.intervalSec || 999999);
-      const bi = Number(b.intervalSec || 999999);
-      return ai - bi || Number(a.expiry) - Number(b.expiry);
-    });
-
-    const chosen = candidates[0];
+    let chosen = await findForAsset(state.asset);
+    if (!chosen) {
+      const fallback = state.asset === 'BTC' ? 'ETH' : 'BTC';
+      chosen = await findForAsset(fallback);
+      if (chosen) {
+        state.asset = fallback;
+        $$('.asset-tab').forEach((b) => b.classList.toggle('selected', b.dataset.asset === fallback));
+      }
+    }
     if (!chosen) {
       state.market = null;
-      $('#marketStatus').textContent = `No open ${state.asset} round found yet. Checking again automatically.`;
-      $('#marketQuestion').textContent = `Waiting for the next DreamDEX ${state.asset} Event Contract.`;
+      $('#marketQuestion').textContent = 'Waiting for the next DreamDEX Event Contract.';
+      $('#marketStatus').textContent = 'No open BTC or ETH round is listed right now. Retrying automatically.';
       $('#countdown').textContent = '--:--';
       state.discoveryTimer = setTimeout(discoverMarket, 6000);
       return;
@@ -152,22 +146,19 @@ async function discoverMarket() {
     $('#assetTitle').textContent = state.asset;
     $('#marketInterval').textContent = intervalLabel(chosen);
     $('#marketQuestion').textContent = chosen.question || `Will ${state.asset} finish this round higher than it started?`;
-    $('#marketStatus').textContent = `Live on DreamDEX · ${intervalLabel(chosen)} round`;
+    $('#marketStatus').textContent = `DreamDEX live market found · ${intervalLabel(chosen)} round`;
     $('#enterButton').disabled = false;
-
-    const addr = chosen.marketAddress || chosen.poolAddress;
+    const addr = marketPool(chosen);
     if (addr) {
       $('#marketLink').href = `${EXPLORER}/address/${addr}`;
       $('#marketLink').hidden = false;
     }
     startClock(Number(chosen.expiry));
   } catch (e) {
+    console.warn('DreamDEX discovery:', e);
     state.market = null;
-    $('#marketStatus').textContent = 'DreamDEX is slow right now. Retrying automatically…';
-    $('#marketQuestion').textContent = `Waiting for the next DreamDEX ${state.asset} Event Contract.`;
-    $('#countdown').textContent = '--:--';
-    $('#enterButton').disabled = true;
-    console.warn('Market discovery retry:', e);
+    $('#marketQuestion').textContent = 'DreamDEX market feed is temporarily unavailable.';
+    $('#marketStatus').textContent = 'Retrying automatically. You can still connect your wallet now.';
     state.discoveryTimer = setTimeout(discoverMarket, 6000);
   }
 }
@@ -179,7 +170,7 @@ function startClock(expiry) {
     $('#countdown').textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
     if (left === 0) {
       clearInterval(state.clockTimer);
-      if (state.position) settlePosition(); else discoverMarket();
+      if (state.position?.status === 'open') settlePosition(); else discoverMarket();
     }
   };
   render();
@@ -187,54 +178,54 @@ function startClock(expiry) {
 }
 
 async function enterPosition() {
-  if (state.busy || !state.market) return;
+  if (!state.market || state.busy) return;
   try {
     setBusy(true, 'Connect your wallet to continue.');
     await connectWallet();
-    await ensureFunding(state.market);
+    await verifyFunding(state.market);
 
-    const symbol = outcomeSymbol(state.market, state.side);
-    if (!symbol) throw new Error(`DreamDEX did not return the ${state.side} outcome symbol.`);
     const shares = Math.max(0.1, Number($('#stake').value || 1));
     if (!Number.isFinite(shares) || shares <= 0) throw new Error('Enter a valid number of shares.');
+    const quantity = BigInt(Math.round(shares * 1_000_000));
+    const side = state.side === 'UP' ? 'BUY_YES' : 'BUY_NO';
 
-    $('#status').textContent = `Buying ${shares} ${state.side} share${shares === 1 ? '' : 's'} on DreamDEX. Approve in your wallet.`;
-    const order = await exchange.createOrder(symbol, 'market', 'buy', shares, undefined, { slippage: 0.12, timeInForce: 'IOC' });
-    const filled = Number(order?.filled || 0);
-    if (filled <= 0) throw new Error('This round had no fillable liquidity. No trade was made. Try the next round.');
-    const txHash = extractTxHash(order);
-    if (!txHash) throw new Error('DreamDEX reported a fill but no transaction hash was returned.');
+    $('#status').textContent = `Buying ${shares} ${state.side} share${shares === 1 ? '' : 's'}. Approve the DreamDEX transaction in your wallet.`;
+    const result = await exchange.trader.placeOrder({
+      pool: marketPool(state.market),
+      side,
+      price: probabilityToPrice(0.99),
+      quantity,
+      orderType: 2,
+    });
+
+    const filled = fillUnits(result);
+    if (filled <= 0n) throw new Error('DreamDEX returned no fill. No trade was made. Try the next round.');
+    const hash = txHash(result);
 
     const position = {
+      marketId: String(marketId(state.market)),
+      pool: marketPool(state.market),
       asset: state.asset,
       side: state.side,
       wallet: state.wallet,
-      marketId: marketId(state.market),
-      marketAddress: state.market.marketAddress,
-      poolAddress: state.market.poolAddress,
-      outcomeSymbol: symbol,
-      collateral: state.market.collateral,
-      collateralSymbol: state.market.quoteSymbol || state.market.collateralSymbol || 'test collateral',
-      quoteDecimals: Number(state.market.quoteDecimals || 6),
-      shares: filled,
-      entryRequestedShares: shares,
       expiry: Number(state.market.expiry),
-      entryTx: txHash,
+      quantityUnits: filled.toString(),
+      shares: sharesText(filled),
+      entryTx: hash,
       status: 'open',
       createdAt: new Date().toISOString(),
     };
-
     state.position = position;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
     showPosition();
-    beginQuoteLoop();
-    await refreshCashoutQuote();
     toast('Real DreamDEX position opened.');
   } catch (e) {
+    console.error('Entry failed:', e);
     $('#status').textContent = errText(e);
     toast(errText(e));
   } finally {
-    setBusy(false);
+    state.busy = false;
+    $('#enterButton').disabled = !state.market;
   }
 }
 
@@ -246,135 +237,87 @@ function showPosition() {
   $('#positionView').hidden = false;
   $('#assetTitle').textContent = p.asset;
   $('#positionSide').textContent = `${p.side} ${p.side === 'UP' ? '↑' : '↓'}`;
-  $('#entryValue').textContent = `${p.entryRequestedShares} shares`;
-  $('#shareValue').textContent = Number(p.shares).toLocaleString(undefined, { maximumFractionDigits: 6 });
-  $('#payoutValue').textContent = `up to ${Number(p.shares).toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
-  $('#offerSymbol').textContent = p.collateralSymbol;
-  $('#entryTx').href = `${EXPLORER}/tx/${p.entryTx}`;
-  $('#entryTx').hidden = false;
+  $('#entryValue').textContent = `${p.shares} shares`;
+  $('#shareValue').textContent = p.shares;
+  $('#payoutValue').textContent = `up to ${p.shares} tUSDC`;
+  $('#offerValue').textContent = 'BEST BID';
+  $('#offerSymbol').textContent = 'DreamDEX exit';
+  $('#cashoutButton').disabled = false;
+  $('#cashoutButton').textContent = 'TAKE THE BEST AVAILABLE BID';
+  $('#positionStatus').textContent = 'You are holding a real DreamDEX outcome token. Cash out attempts to sell it immediately into the live book.';
+  if (p.entryTx) {
+    $('#entryTx').href = `${EXPLORER}/tx/${p.entryTx}`;
+    $('#entryTx').hidden = false;
+  }
   startClock(p.expiry);
-}
-
-async function restorePosition() {
-  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-  if (!saved || ['closed', 'claimed', 'lost'].includes(saved.status)) return false;
-  state.position = saved;
-  state.asset = saved.asset;
-  state.side = saved.side;
-  try {
-    const listed = await exchange.client.listLiveBinaryMarkets({ asset: saved.asset, limit: 50 });
-    state.market = (listed || []).find((m) => String(marketId(m)) === String(saved.marketId)) || null;
-  } catch {}
-  showPosition();
-  if (state.market && saved.status === 'open') {
-    beginQuoteLoop();
-    await refreshCashoutQuote();
-  }
-  return true;
-}
-
-function beginQuoteLoop() {
-  clearInterval(state.quoteTimer);
-  state.quoteTimer = setInterval(refreshCashoutQuote, 3500);
-}
-
-async function refreshCashoutQuote() {
-  const p = state.position;
-  if (!p || p.status !== 'open' || !state.market) return;
-  try {
-    const decimals = Number(p.quoteDecimals || 6);
-    const rawQty = parseUnits(String(p.shares), decimals);
-    const quote = await exchange.client.quoteBinarySell({
-      marketId: p.marketId,
-      side: p.side === 'UP' ? 'SELL_YES' : 'SELL_NO',
-      quantity: rawQty,
-      depth: 10,
-      slippageBps: 300n,
-    });
-
-    if (!quote || quote.fillableQuantity <= 0n) {
-      $('#offerValue').textContent = '—';
-      $('#cashoutButton').disabled = true;
-      $('#cashoutButton').textContent = 'NO CASH-OUT OFFER RIGHT NOW';
-      $('#positionStatus').textContent = 'No executable DreamDEX bid is available for this position yet.';
-      return;
-    }
-
-    const proceeds = fmt(quote.estProceeds, decimals, 4);
-    p.lastQuote = { proceeds, fillableQuantity: quote.fillableQuantity.toString(), at: Date.now() };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-    $('#offerValue').textContent = proceeds;
-    $('#cashoutButton').disabled = false;
-    $('#cashoutButton').textContent = `TAKE ${proceeds} ${p.collateralSymbol} NOW`;
-    $('#positionStatus').textContent = 'Live executable estimate from DreamDEX bids.';
-  } catch (e) {
-    $('#cashoutButton').disabled = true;
-    $('#cashoutButton').textContent = 'CASH-OUT QUOTE UNAVAILABLE';
-    $('#positionStatus').textContent = 'DreamDEX quote is temporarily unavailable. Retrying…';
-  }
 }
 
 async function cashOut() {
   const p = state.position;
-  if (!p || state.busy) return;
+  if (!p || p.status !== 'open' || state.busy) return;
   try {
     state.busy = true;
+    $('#cashoutButton').disabled = true;
     await connectWallet();
     if (state.wallet.toLowerCase() !== p.wallet.toLowerCase()) throw new Error('Connect the same wallet that opened this position.');
 
-    const decimals = Number(p.quoteDecimals || 6);
-    const rawQty = parseUnits(String(p.shares), decimals);
-    const quote = await exchange.client.quoteBinarySell({
-      marketId: p.marketId,
-      side: p.side === 'UP' ? 'SELL_YES' : 'SELL_NO',
-      quantity: rawQty,
-      depth: 10,
-      slippageBps: 300n,
+    const side = p.side === 'UP' ? 'SELL_YES' : 'SELL_NO';
+    $('#positionStatus').textContent = 'Trying to sell your position into the best available DreamDEX bid. Approve in your wallet.';
+    const result = await exchange.trader.placeOrder({
+      pool: p.pool,
+      side,
+      price: probabilityToPrice(0.01),
+      quantity: BigInt(p.quantityUnits),
+      orderType: 2,
     });
-    if (!quote || quote.fillableQuantity <= 0n) throw new Error('That cash-out offer disappeared. No sell was sent.');
 
-    const sellShares = Number(formatUnits(quote.fillableQuantity, decimals));
-    $('#positionStatus').textContent = `Selling ${sellShares} share${sellShares === 1 ? '' : 's'} on DreamDEX. Approve in your wallet.`;
-    const order = await exchange.createOrder(p.outcomeSymbol, 'market', 'sell', sellShares, undefined, { slippage: 0.12, timeInForce: 'IOC' });
-    const filled = Number(order?.filled || 0);
-    if (filled <= 0) throw new Error('The cash-out found no fill. Your position remains open.');
-    const txHash = extractTxHash(order);
-    if (!txHash) throw new Error('Exit filled but no transaction hash was returned.');
-
-    p.status = filled + 1e-9 >= Number(p.shares) ? 'closed' : 'partial';
-    p.exitTx = txHash;
-    p.exitFilledShares = filled;
-    p.closedAt = new Date().toISOString();
+    const filled = fillUnits(result);
+    if (filled <= 0n) throw new Error('No buyer filled the cash-out. Your position is still yours.');
+    const hash = txHash(result);
+    const remaining = BigInt(p.quantityUnits) - filled;
+    p.quantityUnits = remaining > 0n ? remaining.toString() : '0';
+    p.status = remaining > 0n ? 'partial' : 'closed';
+    p.exitTx = hash;
+    p.exitFilled = sharesText(filled);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-    clearInterval(state.quoteTimer);
-    showResult('DEAL TAKEN', `DreamDEX filled a real sell for ${filled} ${p.side} share${filled === 1 ? '' : 's'}.`, txHash);
-    toast('Cash-out filled onchain.');
+
+    if (remaining > 0n) {
+      p.shares = sharesText(remaining);
+      state.position = p;
+      showPosition();
+      $('#positionStatus').textContent = `DreamDEX sold ${p.exitFilled} shares. ${p.shares} shares remain.`;
+      toast('Partial cash-out filled.');
+    } else {
+      showResult('DEAL TAKEN', `DreamDEX sold your ${p.side} position onchain. ${p.exitFilled} shares filled.`, hash);
+      toast('Cash-out filled onchain.');
+    }
   } catch (e) {
+    console.error('Cash-out failed:', e);
     $('#positionStatus').textContent = errText(e);
     toast(errText(e));
   } finally {
     state.busy = false;
+    if (state.position?.status === 'open' || state.position?.status === 'partial') $('#cashoutButton').disabled = false;
   }
 }
 
-function showResult(title, copy, txHash) {
+function showResult(title, copy, hash) {
   $('#setupView').hidden = true;
   $('#positionView').hidden = true;
   $('#resultView').hidden = false;
   $('#resultTitle').textContent = title;
   $('#resultCopy').textContent = copy;
-  $('#resultProof').innerHTML = txHash ? `<a href="${EXPLORER}/tx/${txHash}" target="_blank" rel="noreferrer">View Somnia transaction ↗</a>` : 'Verified from DreamDEX settlement.';
+  $('#resultProof').innerHTML = hash ? `<a href="${EXPLORER}/tx/${hash}" target="_blank" rel="noreferrer">View Somnia transaction ↗</a>` : 'DreamDEX settlement determines the final result.';
 }
 
 async function settlePosition() {
   const p = state.position;
-  if (!p || p.status !== 'open') return;
-  clearInterval(state.quoteTimer);
+  if (!p || !['open', 'partial'].includes(p.status)) return;
   $('#positionStatus').textContent = 'Round ended. Waiting for DreamDEX settlement…';
   try {
     const m = await exchange.client.getMarketOnchain(p.marketId);
     if (!m?.finalized && !m?.isResolved && !m?.isVoided) {
-      setTimeout(settlePosition, 7000);
+      setTimeout(settlePosition, 8000);
       return;
     }
     const idx = p.side === 'UP' ? 0 : 1;
@@ -384,10 +327,11 @@ async function settlePosition() {
       showResult('ROUND LOST', `You held ${p.side}. DreamDEX settled the other side.`, null);
       return;
     }
-    showResult('YOU HELD IT', `Your ${p.side} position won. You can claim it from the same wallet.`, null);
+    showResult('YOU HELD IT', `Your ${p.side} position won. Claim it from the same wallet.`, null);
     $('#claimButton').hidden = false;
-  } catch {
-    $('#positionStatus').textContent = 'DreamDEX settlement RPC is slow. You can retry shortly.';
+  } catch (e) {
+    console.warn('Settlement check:', e);
+    $('#positionStatus').textContent = 'DreamDEX settlement RPC is slow. The position remains safe in your wallet.';
   }
 }
 
@@ -405,8 +349,7 @@ async function claim() {
     if (bal === 0n) throw new Error('No claimable winning balance was found.');
     const result = await exchange.trader.redeem({ marketId: p.marketId, outcomeIdx: idx, amount: bal });
     if (result?.receipt?.status === 'reverted') throw new Error('Claim reverted onchain.');
-    const hash = extractTxHash(result);
-    if (!hash) throw new Error('Claim sent but no transaction hash was returned.');
+    const hash = txHash(result);
     p.status = 'claimed';
     p.claimTx = hash;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
@@ -418,11 +361,20 @@ async function claim() {
   }
 }
 
+function restorePosition() {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+  if (!saved || ['closed', 'claimed', 'lost'].includes(saved.status)) return false;
+  state.position = saved;
+  state.asset = saved.asset;
+  state.side = saved.side;
+  showPosition();
+  return true;
+}
+
 function resetRound() {
   localStorage.removeItem(STORAGE_KEY);
   state.position = null;
   state.market = null;
-  clearInterval(state.quoteTimer);
   $('#positionView').hidden = true;
   $('#resultView').hidden = true;
   $('#setupView').hidden = false;
@@ -448,12 +400,12 @@ $('#walletButton').addEventListener('click', async () => {
     window.location.href = `https://metamask.app.link/dapp/${SITE_HOST}`;
     return;
   }
-  try { await connectWallet(); }
+  try { await connectWallet(); toast('Wallet connected.'); }
   catch (e) { toast(errText(e)); }
 });
 $('#enterButton').addEventListener('click', enterPosition);
 $('#cashoutButton').addEventListener('click', cashOut);
-$('#holdButton').addEventListener('click', () => toast('Holding until the DreamDEX result.'));
+$('#holdButton').addEventListener('click', () => toast('Holding until DreamDEX settles the round.'));
 $('#claimButton').addEventListener('click', claim);
 $('#newRoundButton').addEventListener('click', resetRound);
 
@@ -465,8 +417,5 @@ if (window.ethereum?.on) {
   });
 }
 
-(async function init() {
-  setupWalletButton();
-  const restored = await restorePosition();
-  if (!restored) await discoverMarket();
-})();
+setupWalletButton();
+if (!restorePosition()) discoverMarket();
