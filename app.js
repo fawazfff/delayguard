@@ -49,9 +49,7 @@ function setStatus(message, mode = 'working') {
   const el = $('#receiptStatus');
   if (el) el.textContent = message;
   const badge = $('#receiptBadge');
-  if (badge) {
-    badge.textContent = mode === 'done' ? 'Onchain' : mode === 'error' ? 'Needs action' : 'Working';
-  }
+  if (badge) badge.textContent = mode === 'done' ? 'Onchain' : mode === 'error' ? 'Needs action' : 'Working';
 }
 
 function setBusy(value, label) {
@@ -81,14 +79,9 @@ function updatePreview() {
 }
 
 async function ensureSomnia() {
-  if (!window.ethereum) {
-    throw new Error('No browser wallet found. Open DelayGuard inside MetaMask or Rabby and try again.');
-  }
+  if (!window.ethereum) throw new Error('No browser wallet found. Open DelayGuard inside MetaMask or Rabby and try again.');
   try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: SOMNIA_HEX_CHAIN_ID }],
-    });
+    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SOMNIA_HEX_CHAIN_ID }] });
   } catch (error) {
     if (error?.code !== 4902) throw error;
     await window.ethereum.request({
@@ -108,17 +101,10 @@ async function connectWallet() {
   await ensureSomnia();
   const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
   if (!address) throw new Error('No wallet account was selected.');
-
-  const walletClient = createWalletClient({
-    account: address,
-    chain: somniaShannon,
-    transport: custom(window.ethereum),
-  });
-
+  const walletClient = createWalletClient({ account: address, chain: somniaShannon, transport: custom(window.ethereum) });
   state.wallet = address;
   state.walletClient = walletClient;
   exchange.setSigner({ walletClient });
-
   $('#walletLabel').textContent = `${address.slice(0, 6)}…${address.slice(-4)}`;
   $('#walletButton').classList.add('connected');
   return address;
@@ -130,80 +116,58 @@ async function readFunding() {
     exchange.client.getViemClient().getBalance({ address: state.wallet }),
     exchange.client.getErc20Balance(SOMNIA_TESTNET_ADDRESSES.testUsdc, state.wallet),
   ]);
-  return {
-    nativeBalance,
-    tusdcRaw,
-    tusdc: Number(formatUnits(tusdcRaw, 6)),
-  };
+  return { nativeBalance, tusdcRaw, tusdc: Number(formatUnits(tusdcRaw, 6)) };
 }
 
 async function ensureTestCollateral() {
   const before = await readFunding();
   if (!before) throw new Error('Connect your wallet first.');
-  if (before.nativeBalance === 0n) {
-    throw new Error('This wallet has no STT for gas. Fund it with Somnia Shannon test STT first.');
-  }
+  if (before.nativeBalance === 0n) throw new Error('This wallet has no STT for gas. Fund it with Somnia Shannon test STT first.');
   if (before.tusdc >= 2) return before;
 
   setStatus('Requesting free DreamDEX test USDC. Approve the faucet transaction in your wallet.');
   setBusy(true, 'Getting test USDC…');
   const faucet = await exchange.trader.faucet();
-  if (faucet?.receipt?.status === 'reverted') {
-    throw new Error('The DreamDEX test USDC faucet transaction reverted.');
-  }
+  if (faucet?.receipt?.status === 'reverted') throw new Error('The DreamDEX test USDC faucet transaction reverted.');
   await sleep(1800);
   const after = await readFunding();
-  if (!after || after.tusdc <= 0) {
-    throw new Error('DreamDEX test USDC did not arrive. Check the faucet transaction and retry.');
-  }
+  if (!after || after.tusdc <= 0) throw new Error('DreamDEX test USDC did not arrive. Check the faucet transaction and retry.');
   return after;
-}
-
-function marketExpiry(market) {
-  const raw = market?.info?.expiry ?? market?.info?.marketExpiry ?? market?.info?.expirySec;
-  const n = Number(raw || 0);
-  return Number.isFinite(n) ? n : 0;
 }
 
 async function findBestMarket() {
   setStatus(`Finding a live ${state.asset} DreamDEX Event Contract…`);
   setBusy(true, 'Finding live market…');
-  const markets = await exchange.loadMarkets(true);
-  const values = Array.isArray(markets) ? markets : Object.values(markets || exchange.markets || {});
   const now = Math.floor(Date.now() / 1000);
-  const requested = Number(state.minutes) * 60;
+  const wantedSeconds = Number(state.minutes) * 60;
+  const collateral = SOMNIA_TESTNET_ADDRESSES.testUsdc.toLowerCase();
+  const listed = await exchange.client.listLiveBinaryMarkets({ asset: state.asset, limit: 50 });
+  const candidates = [];
 
-  const candidates = values.filter((market) => {
-    if (market?.type !== 'binary' || market?.active === false) return false;
-    const symbol = String(market.symbol || '').toUpperCase();
-    if (!symbol.startsWith(`${state.asset}-`)) return false;
-    const expiry = marketExpiry(market);
-    return !expiry || expiry > now + 45;
-  });
+  for (const market of listed) {
+    if (String(market.asset).toUpperCase() !== state.asset) continue;
+    if (market.collateral?.toLowerCase() !== collateral) continue;
+    const secondsLeft = Number(market.expiry) - now;
+    if (secondsLeft < 60) continue;
+    const onchain = await exchange.client.getMarketOnchain(market.marketId);
+    if (!onchain || onchain.status !== 1) continue;
+    candidates.push({ market, onchain, secondsLeft });
+  }
 
   if (!candidates.length) {
-    throw new Error(`No live ${state.asset} Event Contract is trading right now. Try again when the next DreamDEX window opens.`);
+    throw new Error(`No live ${state.asset} DreamDEX Event Contract using test USDC is trading right now. Try again when the next window opens.`);
   }
 
   candidates.sort((a, b) => {
-    const ax = marketExpiry(a);
-    const bx = marketExpiry(b);
-    if (!ax && !bx) return 0;
-    if (!ax) return 1;
-    if (!bx) return -1;
-    return Math.abs((ax - now) - requested) - Math.abs((bx - now) - requested);
+    const aCadence = Number(a.market.intervalSec || a.secondsLeft);
+    const bCadence = Number(b.market.intervalSec || b.secondsLeft);
+    return Math.abs(aCadence - wantedSeconds) - Math.abs(bCadence - wantedSeconds) || a.secondsLeft - b.secondsLeft;
   });
   return candidates[0];
 }
 
 function extractTxHash(value) {
-  const possible = [
-    value?.info?.hash,
-    value?.info?.transactionHash,
-    value?.info?.receipt?.transactionHash,
-    value?.hash,
-    value?.id,
-  ];
+  const possible = [value?.txHash, value?.hash, value?.info?.hash, value?.info?.transactionHash, value?.info?.receipt?.transactionHash, value?.receipt?.transactionHash];
   return possible.find((v) => typeof v === 'string' && /^0x[a-fA-F0-9]{64}$/.test(v)) || null;
 }
 
@@ -218,10 +182,12 @@ function renderRealReceipt(receipt) {
   $('#receiptRisk').textContent = `Protected if ${receipt.asset} ${receipt.direction === 'UP' ? 'rises' : 'falls'}`;
   $('#receiptAmount').textContent = `Plan: ${receipt.plannedAmount} ${receipt.currency} · ${receipt.requestedMinutes} minutes`;
   $('#receiptSide').textContent = `${receipt.asset} ${receipt.direction === 'UP' ? 'Up' : 'Down'}`;
-  $('#receiptBadge').textContent = 'Onchain';
+  $('#receiptBadge').textContent = receipt.claimHash ? 'Claimed' : receipt.settlement === 'lost' ? 'Settled' : 'Onchain';
   $('#receiptStatus').textContent = receipt.claimHash
-    ? 'Protection settled and winning position claimed onchain.'
-    : `Onchain protection confirmed. ${receipt.filled} share${receipt.filled === 1 ? '' : 's'} filled.`;
+    ? 'Protection settled and the winning position was claimed onchain.'
+    : receipt.settlement === 'lost'
+      ? 'This Event Contract settled on the other side. There is nothing to claim.'
+      : `Onchain protection confirmed. ${receipt.filled} share${receipt.filled === 1 ? '' : 's'} filled.`;
 
   const txLink = $('#receiptTxLink');
   if (txLink && receipt.transactionHash) {
@@ -230,7 +196,7 @@ function renderRealReceipt(receipt) {
     txLink.hidden = false;
   }
   const claimButton = $('#claimProtection');
-  if (claimButton) claimButton.hidden = Boolean(receipt.claimHash);
+  if (claimButton) claimButton.hidden = Boolean(receipt.claimHash || receipt.settlement === 'lost');
   location.hash = 'receipt';
 }
 
@@ -242,6 +208,7 @@ function createPlanReceipt() {
   $('#receiptBadge').textContent = 'Ready';
   $('#receiptStatus').textContent = 'Plan ready. Press Protect on Somnia testnet to create the real onchain position.';
   $('#executeProtection').hidden = false;
+  $('#claimProtection').hidden = true;
   location.hash = 'receipt';
 }
 
@@ -251,52 +218,45 @@ async function executeProtection() {
     setBusy(true, 'Connecting wallet…');
     setStatus('Connect your wallet to Somnia Shannon testnet.');
     await connectWallet();
-
     await ensureTestCollateral();
-    const market = await findBestMarket();
+
+    const { market } = await findBestMarket();
     const outcome = direction() === 'UP' ? 'YES' : 'NO';
-    const tradable = `${market.symbol}#${outcome}`;
+    const outcomeSymbol = market.outcomes?.find((item) => String(item.symbol).toUpperCase().endsWith(`#${outcome}`))?.symbol;
+    if (!outcomeSymbol) throw new Error(`DreamDEX returned a live market but no ${outcome} outcome symbol.`);
 
-    setStatus(`Buying the ${state.asset} ${direction()} protection. Approve the DreamDEX transaction in your wallet.`);
+    setStatus(`Buying ${state.asset} ${direction()} protection. Your wallet may ask for a one-time tUSDC approval before the order.`);
     setBusy(true, 'Approve in wallet…');
-
-    const order = await exchange.createOrder(
-      tradable,
-      'market',
-      'buy',
-      PROTECTION_SHARES,
-      undefined,
-      { slippage: 0.08, timeInForce: 'IOC' },
-    );
-
-    if (!order || Number(order.filled || 0) <= 0) {
-      throw new Error('The order found no available liquidity, so DelayGuard did not mark you as protected. Try again on the next live market.');
-    }
+    const order = await exchange.createOrder(outcomeSymbol, 'market', 'buy', PROTECTION_SHARES, undefined, { slippage: 0.08, timeInForce: 'IOC' });
+    if (!order || Number(order.filled || 0) <= 0) throw new Error('The order found no available liquidity. DelayGuard did not mark you as protected. Try another live window.');
 
     const txHash = extractTxHash(order);
-    if (!txHash) throw new Error('The order filled but DelayGuard could not read its transaction hash. Nothing fake was saved.');
+    if (!txHash) throw new Error('The order filled but the SDK did not return a transaction hash. Nothing fake was saved.');
 
     const receipt = {
-      version: 3,
+      version: 4,
       network: 'Somnia Shannon testnet',
       wallet: state.wallet,
       plan: state.intent === 'buy' ? 'BUY_LATER' : 'SELL_LATER',
       asset: state.asset,
       direction: direction(),
-      marketId: market.id,
+      marketId: market.marketId,
       marketSymbol: market.symbol,
-      marketAddress: market?.info?.market || market?.info?.address || null,
+      outcomeSymbol,
       outcome,
+      outcomeTokenId: outcome === 'YES' ? market.yesTokenId : market.noTokenId,
       filled: Number(order.filled),
       orderStatus: order.status,
       transactionHash: txHash,
+      marketExpiry: Number(market.expiry),
       plannedAmount: state.amount,
       currency: state.currency,
       requestedMinutes: Number(state.minutes),
       createdAt: new Date().toISOString(),
     };
-
     saveRealReceipt(receipt);
+    $('#executeProtection').hidden = true;
+    $('#claimProtection').hidden = false;
     setStatus('Real DreamDEX protection confirmed on Somnia testnet.', 'done');
     showToast('Onchain protection confirmed.');
   } catch (error) {
@@ -311,39 +271,41 @@ async function executeProtection() {
 async function claimProtection() {
   if (state.busy) return;
   const receipt = JSON.parse(localStorage.getItem('delayguard-real-receipt-v1') || 'null');
-  if (!receipt?.marketId) {
-    showToast('No real onchain protection receipt was found in this browser.');
-    return;
-  }
+  if (!receipt?.marketId) { showToast('No real onchain protection receipt was found in this browser.'); return; }
+
   try {
-    setBusy(true, 'Checking settlement…');
-    setStatus('Checking whether the Event Contract has settled…');
+    state.busy = true;
+    setStatus('Checking the Event Contract settlement…');
     await connectWallet();
     if (state.wallet.toLowerCase() !== receipt.wallet.toLowerCase()) {
       throw new Error(`Connect the same wallet that created this protection: ${receipt.wallet.slice(0, 6)}…${receipt.wallet.slice(-4)}`);
     }
 
-    await exchange.loadMarkets(true);
-    const balances = await exchange.fetchBalance();
-    const outcomeSymbol = `${receipt.marketSymbol}#${receipt.outcome}`;
-    const position = balances?.[outcomeSymbol]?.total || 0;
-    if (Number(position) <= 0) {
-      throw new Error('There is no claimable winning position yet. The market may not have settled, or this protection side did not win.');
+    const market = await exchange.client.getMarketOnchain(receipt.marketId);
+    if (!market.finalized && !market.isResolved && !market.isVoided) throw new Error('This Event Contract has not settled yet. Try Claim again after its expiry.');
+
+    const outcomeIdx = receipt.outcome === 'YES' ? 0 : 1;
+    if (!market.isVoided && Number(market.winningOutcome) !== outcomeIdx) {
+      receipt.settlement = 'lost';
+      receipt.settledAt = new Date().toISOString();
+      saveRealReceipt(receipt);
+      setStatus('The market settled on the other side. Nothing is claimable.', 'done');
+      return;
     }
 
-    const amountRaw = BigInt(Math.floor(Number(position) * 1_000_000));
-    setStatus('A winning position was found. Approve the claim in your wallet.');
-    const result = await exchange.trader.redeem({
-      marketId: receipt.marketId,
-      amount: amountRaw,
-      outcomeIdx: receipt.outcome === 'YES' ? 0 : 1,
-    });
-    if (result?.receipt?.status === 'reverted') throw new Error('The claim transaction reverted.');
+    const tokenId = outcomeIdx === 0 ? market.yesId : market.noId;
+    const balance = await exchange.client.getOutcomeBalance({ outcomeToken: market.outcomeToken, account: state.wallet, id: BigInt(tokenId) });
+    if (balance === 0n) throw new Error('This wallet has no claimable balance for the winning outcome.');
+
+    setStatus('Winning position found. Approve the DreamDEX claim in your wallet.');
+    const result = await exchange.trader.redeem({ marketId: receipt.marketId, outcomeIdx, amount: balance });
+    if (result?.receipt?.status === 'reverted') throw new Error('The claim transaction reverted onchain.');
     const claimHash = extractTxHash(result);
-    if (!claimHash) throw new Error('Claim was sent but the transaction hash could not be read.');
+    if (!claimHash) throw new Error('The claim was sent but its transaction hash could not be read.');
 
     receipt.claimHash = claimHash;
     receipt.claimedAt = new Date().toISOString();
+    receipt.settlement = market.isVoided ? 'voided-claimed' : 'won-claimed';
     saveRealReceipt(receipt);
     setStatus('Winning protection claimed onchain.', 'done');
     showToast('Claim confirmed.');
@@ -352,7 +314,7 @@ async function claimProtection() {
     setStatus(error?.shortMessage || error?.message || 'Claim is not available yet.', 'error');
     showToast(error?.shortMessage || error?.message || 'Claim is not available yet.');
   } finally {
-    setBusy(false);
+    state.busy = false;
   }
 }
 
@@ -361,13 +323,11 @@ $$('.choice').forEach((button) => button.addEventListener('click', () => {
   $$('.choice').forEach((item) => item.classList.toggle('selected', item === button));
   updatePreview();
 }));
-
 $$('.time-choice').forEach((button) => button.addEventListener('click', () => {
   state.minutes = button.dataset.time;
   $$('.time-choice').forEach((item) => item.classList.toggle('selected', item === button));
   updatePreview();
 }));
-
 $('#asset').addEventListener('change', (event) => { state.asset = event.target.value; updatePreview(); });
 $('#amount').addEventListener('input', (event) => { state.amount = event.target.value.replace(/[^0-9.]/g, '').slice(0, 10) || '0'; });
 $('#currency').addEventListener('change', (event) => { state.currency = event.target.value; });
@@ -377,7 +337,7 @@ $('#protectionForm').addEventListener('submit', (event) => {
   createPlanReceipt();
 });
 $('#walletButton').addEventListener('click', async () => {
-  try { await connectWallet(); showToast('Wallet connected to Somnia Shannon.'); }
+  try { await connectWallet(); const funding = await readFunding(); showToast(`Wallet connected. DreamDEX tUSDC: ${funding ? funding.tusdc : 0}`); }
   catch (error) { showToast(error?.shortMessage || error?.message || 'Wallet connection failed.'); }
 });
 $('#executeProtection')?.addEventListener('click', executeProtection);
